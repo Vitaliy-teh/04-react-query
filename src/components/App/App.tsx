@@ -1,79 +1,87 @@
 import { useState, useEffect } from "react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import SearchBar from "../SearchBar/SearchBar";
 import MovieGrid from "../MovieGrid/MovieGrid";
 import Loader from "../Loader/Loader";
 import ErrorMessage from "../ErrorMessage/ErrorMessage";
 import MovieModal from "../MovieModal/MovieModal";
 import type { Movie } from "../../types/movie";
+import type { MovieResponse } from "../../services/movieService";
 import { fetchMovies } from "../../services/movieService";
 import toast, { Toaster } from "react-hot-toast";
 import ReactPaginate from "react-paginate";
 import css from "./App.module.css";
 
 function App() {
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [query, setQuery] = useState<string>("");
-  const [page, setPage] = useState<number>(1);
-  const [totalPages, setTotalPages] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
+  const [showNoResultsToast, setShowNoResultsToast] = useState(false);
+
+  const placeholder: MovieResponse = {
+    page: 1,
+    results: [],
+    total_pages: 0,
+    total_results: 0,
+  };
+
+  const {
+  data = placeholder,
+  isLoading,
+  isError,
+  isSuccess,
+  isFetching,
+} = useQuery<MovieResponse, Error>({
+  queryKey: ["movies", query, page],
+  queryFn: () => fetchMovies({ query, page }),
+  enabled: !!query,
+  initialData: placeholder,
+  placeholderData: keepPreviousData,
+});
+
+
+
+  
+  useEffect(() => {
+  if (!isSuccess || isFetching || !showNoResultsToast) return;
+
+  if (data.results.length === 0) {
+    toast.error("No movies found for your request.");
+  }
+
+  setShowNoResultsToast(false);
+}, [isSuccess, isFetching, showNoResultsToast, data]);
+
+
 
   const handleSearch = (newQuery: string) => {
     if (newQuery.trim() === "") return;
+    
     setQuery(newQuery);
     setPage(1);
+    setShowNoResultsToast(true);
   };
-
-  useEffect(() => {
-    const loadMovies = async () => {
-      if (!query) return;
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        const data = await fetchMovies({ query, page });
-        if (!data.results || data.results.length === 0) {
-          toast.error("No movies found for your request.");
-          setMovies([]);
-          setTotalPages(0);
-        } else {
-          setMovies(data.results);
-          setTotalPages(data.total_pages > 500 ? 500 : data.total_pages);
-        }
-      } catch {
-        setError("There was an error while fetching movies.");
-        toast.error("There was an error while fetching movies.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadMovies();
-  }, [query, page]);
 
   const handleSelect = (movie: Movie) => setSelectedMovie(movie);
   const handleCloseModal = () => setSelectedMovie(null);
+
+  const movies = data.results;
+  const totalPages = data?.total_pages ? Math.min(data.total_pages, 500) : 0;
+
 
   return (
     <div className={css.app}>
       <Toaster
         position="top-center"
-        toastOptions={{
-          style: {
-            textAlign: "center",
-          },
-        }}
+        toastOptions={{ style: { textAlign: "center" } }}
       />
 
       <SearchBar onSubmit={handleSearch} />
 
-      {loading && <Loader />}
+      {isLoading && <Loader />}
+      {isError && <ErrorMessage />}
 
-      {!loading && error && <ErrorMessage />}
-
-      {!loading && !error && movies.length > 0 && (
+      {isSuccess && movies.length > 0 && (
         <>
           <MovieGrid movies={movies} onSelect={handleSelect} />
           {totalPages > 1 && (
@@ -92,9 +100,7 @@ function App() {
         </>
       )}
 
-      {selectedMovie && (
-        <MovieModal movie={selectedMovie} onClose={handleCloseModal} />
-      )}
+      {selectedMovie && <MovieModal movie={selectedMovie} onClose={handleCloseModal} />}
     </div>
   );
 }

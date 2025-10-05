@@ -1,4 +1,4 @@
-import axios, { type AxiosResponse } from "axios";
+import axios from "axios";
 import type { Movie } from "../types/movie";
 
 const API_URL = "https://api.themoviedb.org/3/search/movie";
@@ -42,6 +42,6 @@ export async function fetchMovies({
     },
   };
 
-  const response: AxiosResponse<MovieResponse> = await axios.get(API_URL, config);
+  const response = await axios.get<MovieResponse>(API_URL, config);
   return response.data;
 }
